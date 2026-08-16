@@ -155,3 +155,5 @@ The complete end-to-end hackathon demonstration script is detailed in **[`docs/d
 - **Blockchain Layer**: The blockchain layer is implemented as a permissioned, hash-chained event ledger in SQLite for free local execution, architected with standard interfaces for future migration to Hyperledger Fabric.
 - **Cryptographic Protections**: Passwords are exclusively hashed with **Argon2id**; documents are encrypted with **AES-256-GCM** and fingerprinted with **SHA-256**.
 - **Security Triage**: Security monitoring and risk detection engines are rule-based, prioritizing explainability over black-box heuristics.
+# green-vault
+a26ee71df3a9117c8462fdc54a5bfe74225be9bc
