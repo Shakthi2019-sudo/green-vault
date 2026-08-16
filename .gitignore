@@ -1,0 +1,21 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Database
+backend/*.db
+*.db
+
+# Secrets
+.env
+demo/credentials/
+frontend/public/demo/
+
+# OS
+.DS_Store
