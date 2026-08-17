@@ -19,7 +19,11 @@ def get_cases(current_user: User = Depends(get_current_user), db: Session = Depe
 
     for c in all_cases:
         is_auth = PermissionService.user_has_case_access(db, current_user, c.id, "VIEW")
-        doc_count = db.query(Document).filter(Document.case_id == c.id).count()
+        if is_auth:
+            case_docs = db.query(Document).filter(Document.case_id == c.id).all()
+            doc_count = len(PermissionService.filter_case_documents_for_user(db, current_user, case_docs))
+        else:
+            doc_count = 0
         systems = json.loads(c.connected_systems) if c.connected_systems else []
 
         results.append(CaseResponse(
@@ -79,8 +83,10 @@ def get_case_detail(case_id: str, current_user: User = Depends(get_current_user)
             assignment_role=a.assignment_role
         ))
 
-    # Fetch Documents
-    docs = db.query(Document).filter(Document.case_id == case_id).all()
+    # Fetch Documents (Filtered by Role & Classification Access)
+    raw_docs = db.query(Document).filter(Document.case_id == case_id).all()
+    docs = PermissionService.filter_case_documents_for_user(db, current_user, raw_docs)
+
     docs_resp = []
     for d in docs:
         versions_resp = []
@@ -109,6 +115,7 @@ def get_case_detail(case_id: str, current_user: User = Depends(get_current_user)
             case_title=case.title,
             title=d.title,
             category=d.category,
+            classification=getattr(d, "classification", "PUBLIC_CASE_RECORD") or "PUBLIC_CASE_RECORD",
             current_version=d.current_version,
             status=d.status,
             is_restricted=d.is_restricted,

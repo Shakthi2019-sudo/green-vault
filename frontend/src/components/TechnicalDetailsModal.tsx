@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, Copy, Check, ShieldCheck, Database, Link, Hash, Key } from 'lucide-react';
+import { X, Copy, Check, ShieldCheck, Database, Link, Hash, Key, Clock } from 'lucide-react';
+import { formatISTTimestamp } from '../utils/dateUtils';
 
 interface TechnicalDetailsModalProps {
   isOpen: boolean;
@@ -11,12 +12,24 @@ interface TechnicalDetailsModalProps {
     transaction_hash?: string;
     previous_hash?: string;
     sha256_hash?: string;
+    sha256_fingerprint?: string;
     event_type?: string;
-    timestamp?: string;
+    timestamp?: string | Date;
     encryption_algorithm?: string;
     iv_hex?: string;
     tag_hex?: string;
     raw_details?: Record<string, any>;
+    document_id?: string;
+    case_id?: string;
+    category?: string;
+    classification?: string;
+    version_number?: number;
+    encryption_cipher?: string;
+    argon2id_key_derivation?: string;
+    storage_path?: string;
+    tamper_evident_status?: string;
+    created_at?: string | Date;
+    updated_at?: string | Date;
   };
 }
 
@@ -70,6 +83,17 @@ export const TechnicalDetailsModal: React.FC<TechnicalDetailsModalProps> = ({
             </div>
           )}
 
+          {data.timestamp && (
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-2 text-slate-600">
+                <Clock className="w-4 h-4 text-emerald-600" />
+                <span className="font-sans font-medium text-slate-800">Recorded Timestamp (IST):</span>
+              </div>
+              <span className="font-bold text-slate-800 font-mono text-xs">{formatISTTimestamp(data.timestamp)}</span>
+            </div>
+          )}
+
+
           {data.transaction_id && (
             <div>
               <label className="block text-slate-500 font-sans mb-1 font-medium">Transaction ID:</label>
@@ -118,16 +142,18 @@ export const TechnicalDetailsModal: React.FC<TechnicalDetailsModalProps> = ({
             </div>
           )}
 
-          {data.sha256_hash && (
+          {(data.sha256_hash || data.sha256_fingerprint) && (
             <div>
               <label className="block text-slate-500 font-sans mb-1 font-medium flex items-center gap-1.5">
                 <Hash className="w-3.5 h-3.5 text-emerald-600" />
                 Document Plaintext SHA-256 Fingerprint:
               </label>
               <div className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg">
-                <span className="text-emerald-900 font-semibold break-all">{data.sha256_hash}</span>
+                <span className="text-emerald-900 font-semibold break-all">
+                  {data.sha256_hash || data.sha256_fingerprint}
+                </span>
                 <button
-                  onClick={() => copyToClipboard('docsha', data.sha256_hash!)}
+                  onClick={() => copyToClipboard('docsha', (data.sha256_hash || data.sha256_fingerprint)!)}
                   className="ml-2 text-emerald-700 hover:text-emerald-900"
                 >
                   {copiedKey === 'docsha' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}

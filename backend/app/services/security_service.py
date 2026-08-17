@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 
@@ -31,7 +31,7 @@ class SecurityService:
 
         event = SecurityEvent(
             id=event_id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             risk_level=risk_level,
             category=category,
             title=title,

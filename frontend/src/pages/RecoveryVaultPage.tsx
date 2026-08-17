@@ -15,6 +15,7 @@ import {
 import { api } from '../services/api';
 import { RecoveryRecordItem } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
+import { formatISTDateTime } from '../utils/dateUtils';
 
 export const RecoveryVaultPage: React.FC = () => {
   const [records, setRecords] = useState<RecoveryRecordItem[]>([]);
@@ -209,7 +210,7 @@ export const RecoveryVaultPage: React.FC = () => {
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-500 mt-1">
-                    Restored by {rec.restorer_name || 'Court Administrator'} on {rec.restored_at ? new Date(rec.restored_at).toLocaleString() : 'Recent'} &bull; {rec.details}
+                    Restored by {rec.restorer_name || 'Court Administrator'} on {rec.restored_at ? formatISTDateTime(rec.restored_at) : 'Recent'} &bull; {rec.details}
                   </div>
                 </div>
 

@@ -17,6 +17,7 @@ import { api } from '../services/api';
 import { BlockchainRecord, ChainVerificationReport, BlockchainStats } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 import { TechnicalDetailsModal } from '../components/TechnicalDetailsModal';
+import { formatISTDateTime } from '../utils/dateUtils';
 
 export const BlockchainLedgerPage: React.FC = () => {
   const [records, setRecords] = useState<BlockchainRecord[]>([]);
@@ -244,7 +245,7 @@ export const BlockchainLedgerPage: React.FC = () => {
 
               <div className="text-right shrink-0 flex md:flex-col items-center md:items-end justify-between gap-1">
                 <span className="text-xs text-slate-400 font-mono">
-                  {new Date(tx.timestamp).toLocaleString()}
+                  {formatISTDateTime(tx.timestamp)}
                 </span>
                 <span className="text-xs font-semibold text-emerald-700 group-hover:underline flex items-center gap-1">
                   <span>Inspect Technical Details</span>

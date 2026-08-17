@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Network, CheckCircle2, RefreshCw, ExternalLink, ShieldAlert, Building2, FileCheck2, Database } from 'lucide-react';
 import { api } from '../services/api';
 import { ConnectedSystemItem } from '../types';
+import { formatISTDateTime } from '../utils/dateUtils';
 
 export const ConnectedSystemsPage: React.FC = () => {
   const [systems, setSystems] = useState<ConnectedSystemItem[]>([]);
@@ -95,7 +96,7 @@ export const ConnectedSystemsPage: React.FC = () => {
               </div>
 
               <div className="flex items-center justify-between text-[11px] text-slate-400">
-                <span>Last Sync: {new Date(sys.last_sync).toLocaleTimeString()}</span>
+                <span>Last Sync: {formatISTDateTime(sys.last_sync)}</span>
                 <button
                   onClick={() => handleSync(sys.id)}
                   disabled={syncingId === sys.id}

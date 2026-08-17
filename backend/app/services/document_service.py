@@ -1,7 +1,7 @@
 import os
 import shutil
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
 from sqlalchemy.orm import Session
@@ -32,7 +32,8 @@ class DocumentService:
         file_name: str,
         mime_type: str,
         user: User,
-        doc_id: Optional[str] = None
+        doc_id: Optional[str] = None,
+        classification: str = "PUBLIC_CASE_RECORD"
     ) -> Tuple[Document, DocumentVersion]:
         """
         Secure upload pipeline:
@@ -66,12 +67,13 @@ class DocumentService:
             f.write(ciphertext)
 
         # Step 5: Database records
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         doc = Document(
             id=doc_id,
             case_id=case_id,
             title=title,
             category=category,
+            classification=classification,
             current_version=version_num,
             status="ACTIVE",
             is_restricted=False,
@@ -151,7 +153,7 @@ class DocumentService:
         with open(recovery_path, "wb") as f:
             f.write(ciphertext)
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         doc.current_version = next_version
         doc.updated_at = now
 
@@ -247,7 +249,7 @@ class DocumentService:
             raise HTTPException(status_code=404, detail="Document not found")
 
         doc.status = "ARCHIVED"
-        doc.updated_at = datetime.utcnow()
+        doc.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(doc)
 

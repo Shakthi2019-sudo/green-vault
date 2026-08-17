@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
@@ -14,9 +14,11 @@ class PermissionService:
         """
         Check if user has authorization to access case.
         Based on: ROLE + SUB-ROLE + ASSIGNMENT + EXPLICIT PERMISSION
+        Judges, Lawyers, Clients CANNOT access unassigned cases.
+        Court Administrators have system oversight.
         """
         # Court Administrators have system-wide oversight
-        if user.role in ["COURT_ADMIN", "ADMIN"] or "Administrator" in user.sub_role:
+        if user.role in ["COURT_ADMIN", "ADMIN"] or "Administrator" in (user.sub_role or ""):
             return True
 
         # Check explicit Case Assignment
@@ -26,14 +28,14 @@ class PermissionService:
         ).first()
 
         if assignment:
-            # Check role-specific constraints
+            # Check action-specific role constraints
             if required_permission in ["VIEW", "DOWNLOAD"]:
                 return True
             if required_permission in ["UPLOAD", "CREATE_VERSION", "SHARE"]:
                 if user.role in ["JUDGE", "LAWYER"]:
                     return True
-            if required_permission == "ARCHIVE":
-                if "Lead Lawyer" in user.sub_role or user.role == "JUDGE":
+            if required_permission in ["ARCHIVE", "CREATE_COURT_RECORD"]:
+                if user.role in ["JUDGE", "COURT_ADMIN"]:
                     return True
             if required_permission == "APPROVE_ACCESS":
                 return user.role in ["COURT_ADMIN", "ADMIN"]
@@ -62,17 +64,72 @@ class PermissionService:
 
     @classmethod
     def user_has_document_access(cls, db: Session, user: User, document: Document, required_permission: str = "VIEW") -> bool:
-        """Check document level authorization."""
+        """
+        Check document level authorization based on:
+        USER + ROLE + CASE ASSIGNMENT + DOCUMENT CLASSIFICATION + ACTION PERMISSION
+        """
         # First check case level access
         if not cls.user_has_case_access(db, user, document.case_id, required_permission):
             return False
 
-        # If document is RESTRICTED (e.g. during security incident), only Admin or Judge can access
+        # Court Administrators have administrative document access
+        if user.role in ["COURT_ADMIN", "ADMIN"]:
+            return True
+
+        # If document is RESTRICTED (e.g. security incident), only Admin or Judge can access
         if document.is_restricted or document.status == "RESTRICTED":
             if user.role not in ["JUDGE", "COURT_ADMIN", "ADMIN"]:
                 return False
 
+        # Classification-based access control
+        classification = getattr(document, "classification", "PUBLIC_CASE_RECORD") or "PUBLIC_CASE_RECORD"
+
+        # 1. COURT_INTERNAL (e.g. Judge Internal Notes, Judge Review)
+        # Accessible ONLY to JUDGE (and Court Admin). Lawyers and Clients are denied.
+        if classification == "COURT_INTERNAL":
+            if user.role != "JUDGE":
+                return False
+
+        # 2. LAWYER_CONFIDENTIAL (e.g. Lawyer Internal Notes, Legal Strategy)
+        # Accessible ONLY to LAWYER (and Court Admin). Judges and Clients are denied.
+        elif classification == "LAWYER_CONFIDENTIAL":
+            if user.role != "LAWYER":
+                return False
+
+        # 3. RESTRICTED
+        # Accessible ONLY to JUDGE and COURT_ADMIN.
+        elif classification == "RESTRICTED":
+            if user.role not in ["JUDGE", "COURT_ADMIN", "ADMIN"]:
+                return False
+
+        # 4. EVIDENCE
+        # Judges and Lawyers can access all evidence.
+        # Clients can access non-restricted evidence or documents marked client accessible.
+        elif classification == "EVIDENCE":
+            if user.role == "CLIENT":
+                if document.is_restricted or "restricted" in document.title.lower():
+                    return False
+
+        # 5. CLIENT_ACCESSIBLE, PUBLIC_CASE_RECORD, COURT_ORDER, JUDGMENT
+        # Accessible to assigned Judge, Lawyer, Client
+
+        # Check action permissions
+        if required_permission in ["UPLOAD", "CREATE_VERSION"]:
+            if user.role not in ["JUDGE", "LAWYER", "COURT_ADMIN"]:
+                return False
+        elif required_permission == "ARCHIVE":
+            if user.role not in ["JUDGE", "COURT_ADMIN"]:
+                return False
+
         return True
+
+    @classmethod
+    def filter_case_documents_for_user(cls, db: Session, user: User, documents: List[Document]) -> List[Document]:
+        """
+        Filters a list of case documents to only those accessible to the current user.
+        Ensures clients and unauthorized roles do not see confidential internal notes.
+        """
+        return [doc for doc in documents if cls.user_has_document_access(db, user, doc, "VIEW")]
 
     @classmethod
     def create_access_request(
@@ -106,7 +163,7 @@ class PermissionService:
             requested_permissions=json.dumps(requested_permissions),
             reason=reason,
             status="PENDING",
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         db.add(req)
         db.commit()
@@ -132,7 +189,7 @@ class PermissionService:
 
         req.status = "APPROVED" if is_approved else "REJECTED"
         req.reviewed_by = reviewer.id
-        req.reviewed_at = datetime.utcnow()
+        req.reviewed_at = datetime.now(timezone.utc)
         req.review_note = review_note or ("Approved by Court Administrator" if is_approved else "Rejected by Court Administrator")
 
         if is_approved:
@@ -154,7 +211,7 @@ class PermissionService:
                         document_id=None,
                         permission_type=perm_type,
                         granted_by=reviewer.id,
-                        granted_at=datetime.utcnow()
+                        granted_at=datetime.now(timezone.utc)
                     )
                     db.add(new_perm)
 

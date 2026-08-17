@@ -1,11 +1,16 @@
 import os
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(case_sensitive=True)
+
+    BASE_DIR: Path = BASE_DIR
+    BASE_DIR: Path = BASE_DIR
+    PROJECT_ROOT: Path = PROJECT_ROOT
     PROJECT_NAME: str = "GREEN VAULT"
     PROJECT_DESCRIPTION: str = "A Trusted Digital Vault for Legal Records"
     VERSION: str = "1.0.0"
@@ -23,6 +28,20 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = f"sqlite:///{BASE_DIR / 'green_vault.db'}"
 
+    # File Size Limits (Configurable in MB)
+    MAX_DOCUMENT_SIZE_MB: int = 25
+    MAX_IMAGE_SIZE_MB: int = 25
+    MAX_VIDEO_SIZE_MB: int = 250
+
+    # Supported File Extensions
+    ALLOWED_EXTENSIONS: list[str] = [
+        "pdf", "doc", "docx", "txt", "jpg", "jpeg", "png",
+        "mp4", "webm", "mov", "avi", "m4v", "mpeg", "mpg", "3gp", "mkv"
+    ]
+    VIDEO_EXTENSIONS: list[str] = ["mp4", "webm", "mov", "avi", "m4v", "mpeg", "mpg", "3gp", "mkv"]
+    IMAGE_EXTENSIONS: list[str] = ["jpg", "jpeg", "png"]
+    DOCUMENT_EXTENSIONS: list[str] = ["pdf", "doc", "docx", "txt"]
+
     # Vault Storage Paths
     STORAGE_DIR: Path = BASE_DIR / "storage"
     PRIMARY_VAULT_DIR: Path = BASE_DIR / "storage" / "primary_vault"
@@ -33,9 +52,6 @@ class Settings(BaseSettings):
     DEMO_CREDENTIALS_DIR: Path = PROJECT_ROOT / "demo" / "credentials"
     DEMO_CREDENTIALS_FILE: Path = PROJECT_ROOT / "demo" / "credentials" / "GREEN_VAULT_DEMO_CREDENTIALS.md"
     DEMO_DOCUMENTS_DIR: Path = PROJECT_ROOT / "demo" / "documents"
-
-    class Config:
-        case_sensitive = True
 
 settings = Settings()
 

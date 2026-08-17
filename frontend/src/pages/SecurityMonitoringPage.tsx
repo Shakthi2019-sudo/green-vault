@@ -16,6 +16,7 @@ import {
 import { api } from '../services/api';
 import { SecurityStatusReport, SecurityEventItem } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
+import { formatISTDateTime } from '../utils/dateUtils';
 
 export const SecurityMonitoringPage: React.FC = () => {
   const navigate = useNavigate();
@@ -175,7 +176,7 @@ export const SecurityMonitoringPage: React.FC = () => {
                   </div>
 
                   <div className="text-right text-xs text-slate-400 font-mono">
-                    {new Date(ev.timestamp).toLocaleString()}
+                    {formatISTDateTime(ev.timestamp)}
                   </div>
                 </div>
 

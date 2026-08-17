@@ -68,6 +68,7 @@ export interface DocumentItem {
   case_title?: string;
   title: string;
   category: string;
+  classification: string;
   current_version: number;
   status: string;
   is_restricted: boolean;

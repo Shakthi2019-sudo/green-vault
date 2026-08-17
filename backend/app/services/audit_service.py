@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from app.models.models import AuditEvent, User
@@ -20,7 +20,7 @@ class AuditService:
     ) -> AuditEvent:
         event = AuditEvent(
             id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             actor_id=actor.id if actor else None,
             actor_name=actor.full_name if actor else "System",
             actor_role=actor.sub_role if actor else "Automated Process",

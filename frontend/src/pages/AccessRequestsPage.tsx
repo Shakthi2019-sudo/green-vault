@@ -16,6 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { AccessRequestItem, CaseItem } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
+import { formatISTTimestamp, formatISTDateTime, formatISTDate } from '../utils/dateUtils';
 
 export const AccessRequestsPage: React.FC = () => {
   const { user } = useAuth();
@@ -147,8 +148,8 @@ export const AccessRequestsPage: React.FC = () => {
                     </h3>
                   </div>
 
-                  <div className="text-right text-[11px] text-slate-400">
-                    {new Date(req.created_at).toLocaleDateString()}
+                  <div className="text-right text-[11px] text-slate-500 font-mono">
+                    {formatISTTimestamp(req.created_at)}
                   </div>
                 </div>
 
@@ -169,7 +170,7 @@ export const AccessRequestsPage: React.FC = () => {
                   <div className="text-xs text-slate-500 flex items-center gap-1.5 pt-1">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>
-                      Reviewed by {req.reviewer_name} on {req.reviewed_at ? new Date(req.reviewed_at).toLocaleDateString() : 'N/A'}: <span className="font-medium text-slate-700">{req.review_note}</span>
+                      Reviewed by {req.reviewer_name} on {req.reviewed_at ? formatISTTimestamp(req.reviewed_at) : 'N/A'}: <span className="font-medium text-slate-700">{req.review_note}</span>
                     </span>
                   </div>
                 )}

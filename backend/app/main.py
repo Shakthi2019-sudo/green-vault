@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database.database import engine, Base, SessionLocal
+from app.models.models import User
 from app.database.seed_data import seed_database
 from app.routers import (
     auth, cases, documents, access_requests,
@@ -17,10 +18,14 @@ async def lifespan(app: FastAPI):
     # Initialize database tables
     Base.metadata.create_all(bind=engine)
 
-    # Seed demo data if database is fresh
+    # Seed demo data if database is fresh or updated
     db = SessionLocal()
     try:
-        seed_database(db, force=False)
+        judge_user = db.query(User).filter(User.username == "Judge-001").first()
+        if not judge_user:
+            seed_database(db, force=True)
+        else:
+            seed_database(db, force=False)
     finally:
         db.close()
 

@@ -78,11 +78,65 @@ export const api = {
     return res.json();
   },
 
-  uploadDocument: async (caseId: string, title: string, category: string, file: File): Promise<DocumentItem> => {
+  getDocumentBlob: async (docId: string, version?: number): Promise<{ blob: Blob; mimeType: string; fileName: string }> => {
+    const url = version ? `${API_BASE}/documents/${docId}/preview?version=${version}` : `${API_BASE}/documents/${docId}/preview`;
+    const res = await fetch(url, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      if (res.status === 401) throw new Error('Your session has expired. Please log in again.');
+      if (res.status === 403) throw new Error('You do not have permission to view this document.');
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to fetch document content');
+    }
+    const blob = await res.blob();
+    const mimeType = res.headers.get('Content-Type') || 'application/octet-stream';
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^";]+)"?/);
+    const fileName = match ? match[1] : `document_${docId}`;
+    return { blob, mimeType, fileName };
+  },
+
+  downloadDocumentFile: async (docId: string, version?: number, fallbackFileName?: string): Promise<void> => {
+    const url = version ? `${API_BASE}/documents/${docId}/download?version=${version}` : `${API_BASE}/documents/${docId}/download`;
+    const res = await fetch(url, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      if (res.status === 401) throw new Error('Your session has expired. Please log in again.');
+      if (res.status === 403) throw new Error('You do not have permission to download this document.');
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Download failed');
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^";]+)"?/);
+    const fileName = match ? match[1] : (fallbackFileName || `document_${docId}.pdf`);
+
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(blobUrl);
+  },
+
+  getDocumentStreamUrl: (docId: string, version?: number): string => {
+    const token = localStorage.getItem('gv_token');
+    const vParam = version ? `version=${version}` : '';
+    const tParam = token ? `token=${encodeURIComponent(token)}` : '';
+    const query = [vParam, tParam].filter(Boolean).join('&');
+    return `${API_BASE}/documents/${docId}/preview${query ? `?${query}` : ''}`;
+  },
+
+  uploadDocument: async (caseId: string, title: string, category: string, file: File, classification: string = 'PUBLIC_CASE_RECORD'): Promise<DocumentItem> => {
     const formData = new FormData();
     formData.append('case_id', caseId);
     formData.append('title', title);
     formData.append('category', category);
+    formData.append('classification', classification);
     formData.append('file', file);
 
     const res = await fetch(`${API_BASE}/documents/upload`, {

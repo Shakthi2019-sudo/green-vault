@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, R
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database.database import get_db
 from app.models.models import Document, DocumentVersion, User, Case
 from app.schemas.schemas import DocumentResponse, DocumentVersionResponse, DocumentVerifyResponse, ArchiveDocumentRequest
@@ -16,16 +17,48 @@ from app.services.blockchain_service import BlockchainService
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
+def validate_uploaded_file(file: UploadFile, file_bytes: bytes) -> str:
+    filename = file.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if not ext or ext not in settings.ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This file type is not supported."
+        )
+
+    file_size_mb = len(file_bytes) / (1024 * 1024)
+    if ext in settings.VIDEO_EXTENSIONS:
+        if file_size_mb > settings.MAX_VIDEO_SIZE_MB:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Video file exceeds maximum allowed size ({settings.MAX_VIDEO_SIZE_MB} MB)."
+            )
+    elif ext in settings.IMAGE_EXTENSIONS:
+        if file_size_mb > settings.MAX_IMAGE_SIZE_MB:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Image file exceeds maximum allowed size ({settings.MAX_IMAGE_SIZE_MB} MB)."
+            )
+    else:
+        if file_size_mb > settings.MAX_DOCUMENT_SIZE_MB:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Document file exceeds maximum allowed size ({settings.MAX_DOCUMENT_SIZE_MB} MB)."
+            )
+
+    return ext
+
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
     case_id: str = Form(...),
     title: str = Form(...),
     category: str = Form(...),
+    classification: str = Form("PUBLIC_CASE_RECORD"),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Check upload permissions
+    # Check upload permissions (Judges, Lawyers, Court Admins)
     if not PermissionService.user_has_case_access(db, current_user, case_id, "UPLOAD"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -33,6 +66,8 @@ async def upload_document(
         )
 
     file_bytes = await file.read()
+    validate_uploaded_file(file, file_bytes)
+
     file_name = file.filename or f"{title.replace(' ', '_')}.pdf"
     mime_type = file.content_type or "application/pdf"
 
@@ -41,6 +76,7 @@ async def upload_document(
         case_id=case_id,
         title=title,
         category=category,
+        classification=classification,
         file_bytes=file_bytes,
         file_name=file_name,
         mime_type=mime_type,
@@ -54,7 +90,7 @@ async def upload_document(
         resource_type="DOCUMENT",
         resource_id=doc.id,
         outcome="SUCCESS",
-        details={"case_id": case_id, "title": title, "sha256": doc_version.sha256_hash}
+        details={"case_id": case_id, "title": title, "classification": classification, "sha256": doc_version.sha256_hash}
     )
 
     case = db.query(Case).filter(Case.id == case_id).first()
@@ -65,6 +101,7 @@ async def upload_document(
         case_title=case.title if case else None,
         title=doc.title,
         category=doc.category,
+        classification=doc.classification,
         current_version=doc.current_version,
         status=doc.status,
         is_restricted=doc.is_restricted,
@@ -145,6 +182,7 @@ def get_document(
         case_title=case.title if case else None,
         title=doc.title,
         category=doc.category,
+        classification=getattr(doc, "classification", "PUBLIC_CASE_RECORD") or "PUBLIC_CASE_RECORD",
         current_version=doc.current_version,
         status=doc.status,
         is_restricted=doc.is_restricted,
@@ -189,7 +227,11 @@ def download_document(
     return StreamingResponse(
         BytesIO(file_bytes),
         media_type=doc_version.mime_type,
-        headers={"Content-Disposition": f'attachment; filename="{doc_version.file_name}"'}
+        headers={
+            "Content-Disposition": f'attachment; filename="{doc_version.file_name}"',
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(len(file_bytes))
+        }
     )
 
 @router.get("/{document_id}/preview")
@@ -211,11 +253,26 @@ def preview_document(
 
     file_bytes, doc_version = DocumentService.get_decrypted_document_bytes(db, document_id, version)
 
+    AuditService.log_event(
+        db=db,
+        actor=current_user,
+        action="VIEW_DOCUMENT",
+        resource_type="DOCUMENT",
+        resource_id=doc.id,
+        outcome="SUCCESS",
+        details={"version": doc_version.version_number, "file_name": doc_version.file_name}
+    )
+
     return Response(
         content=file_bytes,
         media_type=doc_version.mime_type,
-        headers={"Content-Disposition": f'inline; filename="{doc_version.file_name}"'}
+        headers={
+            "Content-Disposition": f'inline; filename="{doc_version.file_name}"',
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(len(file_bytes))
+        }
     )
+
 
 @router.post("/{document_id}/versions", response_model=DocumentVersionResponse)
 async def create_version(
@@ -236,6 +293,7 @@ async def create_version(
         )
 
     file_bytes = await file.read()
+    validate_uploaded_file(file, file_bytes)
     file_name = file.filename or f"{doc.title}_v{doc.current_version + 1}.pdf"
     mime_type = file.content_type or "application/pdf"
 
@@ -355,6 +413,7 @@ def archive_document(
         case_title=case.title if case else None,
         title=archived_doc.title,
         category=archived_doc.category,
+        classification=getattr(archived_doc, "classification", "PUBLIC_CASE_RECORD") or "PUBLIC_CASE_RECORD",
         current_version=archived_doc.current_version,
         status=archived_doc.status,
         is_restricted=archived_doc.is_restricted,

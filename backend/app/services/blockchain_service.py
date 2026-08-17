@@ -1,7 +1,7 @@
 import json
 import hashlib
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
 from app.models.models import BlockchainTransaction
@@ -23,8 +23,9 @@ class BlockchainService:
     ) -> str:
         """Compute cryptographic SHA-256 hash of a blockchain transaction block."""
         block_content = (
-            f"{sequence_number}|{timestamp_str}|{previous_hash}|{event_type}|"
-            f"{case_id or ''}|{document_id or ''}|{user_id or ''}|{status}|{details_json}"
+            f"{sequence_number}|{timestamp_str}|{previous_hash}|"
+            f"{event_type}|{case_id or ''}|{document_id or ''}|"
+            f"{user_id or ''}|{status}|{details_json}"
         )
         return hashlib.sha256(block_content.encode("utf-8")).hexdigest()
 
@@ -57,7 +58,7 @@ class BlockchainService:
             prev_hash = GENESIS_PREVIOUS_HASH
 
         tx_id = f"TX-{uuid.uuid4().hex[:12].upper()}"
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         timestamp_iso = now.isoformat()
 
         tx_hash = cls._compute_hash(

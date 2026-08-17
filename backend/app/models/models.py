@@ -1,9 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Index
 )
 from sqlalchemy.orm import relationship
 from app.database.database import Base
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 class User(Base):
     __tablename__ = "users"
@@ -16,7 +19,7 @@ class User(Base):
     role = Column(String(64), nullable=False)  # JUDGE, LAWYER, CLIENT, COURT_ADMIN, SECURITY_SIMULATION
     sub_role = Column(String(64), nullable=False)  # Assigned Judge, Lead Lawyer, Court Administrator, etc.
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # Relationships
     assignments = relationship("CaseAssignment", back_populates="user", cascade="all, delete-orphan")
@@ -35,7 +38,7 @@ class Case(Base):
     next_hearing = Column(String(32), nullable=True)
     description = Column(Text, nullable=True)
     connected_systems = Column(Text, default="[]")  # JSON list of connected system keys
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # Relationships
     assignments = relationship("CaseAssignment", back_populates="case", cascade="all, delete-orphan")
@@ -50,7 +53,7 @@ class CaseAssignment(Base):
     case_id = Column(String(64), ForeignKey("cases.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     assignment_role = Column(String(64), nullable=False)  # Assigned Judge, Lead Lawyer, Litigant Client, etc.
-    assigned_at = Column(DateTime, default=datetime.utcnow)
+    assigned_at = Column(DateTime, default=utc_now)
 
     case = relationship("Case", back_populates="assignments")
     user = relationship("User", back_populates="assignments")
@@ -62,13 +65,14 @@ class Document(Base):
     case_id = Column(String(64), ForeignKey("cases.id"), nullable=False)
     title = Column(String(255), nullable=False)
     category = Column(String(64), nullable=False)  # Petition, Evidence, Witness Statement, Court Order, etc.
+    classification = Column(String(64), default="PUBLIC_CASE_RECORD", nullable=False)  # PUBLIC_CASE_RECORD, COURT_INTERNAL, LAWYER_CONFIDENTIAL, CLIENT_ACCESSIBLE, RESTRICTED, EVIDENCE, COURT_ORDER, JUDGMENT
     current_version = Column(Integer, default=1)
     status = Column(String(32), default="ACTIVE")  # ACTIVE, RESTRICTED, ARCHIVED
     is_restricted = Column(Boolean, default=False)
     restriction_reason = Column(String(255), nullable=True)
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     case = relationship("Case", back_populates="documents")
     uploader = relationship("User")
@@ -90,7 +94,7 @@ class DocumentVersion(Base):
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     change_summary = Column(String(255), default="Initial Document Registration")
     is_tampered = Column(Boolean, default=False)  # For security simulation
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     document = relationship("Document", back_populates="versions")
     uploader = relationship("User")
@@ -104,7 +108,7 @@ class Permission(Base):
     document_id = Column(String(64), ForeignKey("documents.id"), nullable=True)
     permission_type = Column(String(32), nullable=False)  # VIEW, DOWNLOAD, UPLOAD, CREATE_VERSION, SHARE, ARCHIVE, APPROVE_ACCESS, VIEW_AUDIT, RECOVER
     granted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    granted_at = Column(DateTime, default=datetime.utcnow)
+    granted_at = Column(DateTime, default=utc_now)
 
     user = relationship("User", foreign_keys=[user_id], back_populates="permissions")
     case = relationship("Case", back_populates="permissions")
@@ -123,7 +127,7 @@ class AccessRequest(Base):
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
     review_note = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     user = relationship("User", foreign_keys=[user_id], back_populates="access_requests")
     case = relationship("Case", back_populates="access_requests")
@@ -134,7 +138,7 @@ class BlockchainTransaction(Base):
 
     id = Column(String(64), primary_key=True, index=True)  # TX-UUID
     sequence_number = Column(Integer, unique=True, index=True, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime, default=utc_now, nullable=False)
     previous_hash = Column(String(64), nullable=False)
     transaction_hash = Column(String(64), unique=True, nullable=False)
     event_type = Column(String(64), nullable=False)  # DOCUMENT_REGISTERED, VERSION_CREATED, PERMISSION_GRANTED, etc.
@@ -150,7 +154,7 @@ class SecurityEvent(Base):
     __tablename__ = "security_events"
 
     id = Column(String(64), primary_key=True, index=True)  # SEC-2026-001
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime, default=utc_now, nullable=False)
     risk_level = Column(String(32), nullable=False)  # LOW, MEDIUM, HIGH, CRITICAL
     category = Column(String(64), nullable=False)  # UNAUTHORIZED_ACCESS, INTEGRITY_MISMATCH, etc.
     title = Column(String(255), nullable=False)
@@ -186,7 +190,7 @@ class AuditEvent(Base):
     __tablename__ = "audit_events"
 
     id = Column(String(64), primary_key=True, index=True)  # AUD-2026-001
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime, default=utc_now, nullable=False)
     actor_id = Column(Integer, nullable=True)
     actor_name = Column(String(128), nullable=False)
     actor_role = Column(String(64), nullable=False)
@@ -206,5 +210,5 @@ class ConnectedSystem(Base):
     description = Column(String(255), nullable=False)
     status = Column(String(32), default="CONNECTED_DEMO")
     records_count = Column(Integer, default=0)
-    last_sync = Column(DateTime, default=datetime.utcnow)
+    last_sync = Column(DateTime, default=utc_now)
     badge = Column(String(64), default="Demo Integration")

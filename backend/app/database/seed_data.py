@@ -1,7 +1,7 @@
 import os
 import json
 import shutil
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from sqlalchemy.orm import Session
 
@@ -11,56 +11,62 @@ from app.models.models import (
     Permission, AccessRequest, BlockchainTransaction, SecurityEvent,
     RecoveryRecord, AuditEvent, ConnectedSystem
 )
-from app.utils.crypto import hash_password, generate_strong_password
+from app.utils.crypto import hash_password
 from app.utils.pdf_generator import generate_legal_pdf
+from app.utils.sample_media import create_sample_png_image, create_sample_jpg_image, create_sample_mp4_video
 from app.services.document_service import DocumentService
 from app.services.blockchain_service import BlockchainService
 from app.services.audit_service import AuditService
 
 def seed_database(db: Session, force: bool = False):
     """
-    Seed initial data:
-    1. Create demo users with strong random passwords generated via secrets.
-    2. Write demo/credentials/GREEN_VAULT_DEMO_CREDENTIALS.md.
-    3. Create 3 demo cases.
-    4. Generate and encrypt 10+ fictional legal documents with multi-version histories.
-    5. Register all events onto the Hash-Chained Blockchain Ledger.
-    6. Seed connected legal systems (eCourts, DigiLocker, etc.).
-    7. Seed access requests, audit events, and initial baseline security status.
+    Seed initial demo data for Green Vault:
+    1. Create 10 demo users with predefined secure Argon2id-hashed passwords.
+    2. Write demo/credentials/GREEN_VAULT_DEMO_CREDENTIALS.md & demo_credentials.json.
+    3. Create 5 realistic demo cases (CASE-2026-001 through CASE-2026-005).
+    4. Create user-specific case assignments & granular RBAC permissions.
+    5. Generate and encrypt legal documents, images, and video evidence.
+    6. Register all events onto the Hash-Chained Blockchain Ledger.
+    7. Seed connected legal platforms (eCourts, e-Filing, DigiLocker, ICJS, eSakshya).
+    8. Seed access requests, audit logs, and baseline security status.
     """
-    # Check if already seeded
-    if not force and db.query(User).first() is not None:
-        print("[SEED] Database already populated. Skipping seed.")
+    if not force and db.query(User).filter(User.username == "Judge-001").first() is not None:
+        print("[SEED] Database already populated with Judge-001. Skipping seed.")
         return
 
-    print("[SEED] Starting Green Vault Database Seeding...")
+    print("[SEED] Starting Green Vault Database Seeding with Canonical Demo Personas...")
 
-    # Clear existing data if force
-    if force:
-        db.query(BlockchainTransaction).delete()
-        db.query(AuditEvent).delete()
-        db.query(SecurityEvent).delete()
-        db.query(RecoveryRecord).delete()
-        db.query(AccessRequest).delete()
-        db.query(Permission).delete()
-        db.query(DocumentVersion).delete()
-        db.query(Document).delete()
-        db.query(CaseAssignment).delete()
-        db.query(Case).delete()
-        db.query(ConnectedSystem).delete()
-        db.query(User).delete()
-        db.commit()
+    # Clear existing data
+    db.query(BlockchainTransaction).delete()
+    db.query(AuditEvent).delete()
+    db.query(SecurityEvent).delete()
+    db.query(RecoveryRecord).delete()
+    db.query(AccessRequest).delete()
+    db.query(Permission).delete()
+    db.query(DocumentVersion).delete()
+    db.query(Document).delete()
+    db.query(CaseAssignment).delete()
+    db.query(Case).delete()
+    db.query(ConnectedSystem).delete()
+    db.query(User).delete()
+    db.commit()
 
-        # Clean storage folders
-        for folder in [settings.PRIMARY_VAULT_DIR, settings.RECOVERY_VAULT_DIR]:
-            for item in folder.glob("*"):
-                if item.is_file():
+    # Clean storage folders
+    for folder in [settings.PRIMARY_VAULT_DIR, settings.RECOVERY_VAULT_DIR]:
+        folder.mkdir(parents=True, exist_ok=True)
+        for item in folder.glob("*"):
+            if item.is_file():
+                try:
                     item.unlink()
+                except Exception:
+                    pass
 
-    # --- 1. USER ACCOUNTS ---
+    # --- 1. USER ACCOUNTS (PREDEFINED SECURE CREDENTIALS) ---
     user_definitions = [
+        # JUDGES
         {
             "username": "Judge-001",
+            "password": "xE!6*ztUa524aps6",
             "full_name": "Hon. Justice Rajesh Sharma",
             "email": "judge.sharma@delhicourts.gov.demo",
             "role": "JUDGE",
@@ -69,22 +75,27 @@ def seed_database(db: Session, force: bool = False):
         },
         {
             "username": "Judge-002",
+            "password": "PPhEB%qHSsfVCSUB",
             "full_name": "Hon. Justice Priya Malhotra",
             "email": "judge.malhotra@delhicourts.gov.demo",
             "role": "JUDGE",
             "sub_role": "Reviewing Judge",
             "assigned_cases": ["CASE-2026-002"]
         },
+        # COURT ADMIN
         {
             "username": "Admin-001",
+            "password": "ZG$!$G8EGd6d5@VF",
             "full_name": "Registrar General S. Sundaram",
             "email": "admin.sundaram@delhicourts.gov.demo",
             "role": "COURT_ADMIN",
             "sub_role": "Court Administrator",
-            "assigned_cases": ["CASE-2026-001", "CASE-2026-002", "CASE-2026-003"]
+            "assigned_cases": ["CASE-2026-001", "CASE-2026-002", "CASE-2026-003", "CASE-2026-004", "CASE-2026-005"]
         },
+        # LAWYERS
         {
             "username": "Lawyer-001",
+            "password": "$vC4VbbVF3ZFZpx!",
             "full_name": "Adv. Vikram Sethi",
             "email": "vikram.sethi@legalchambers.demo",
             "role": "LAWYER",
@@ -93,6 +104,7 @@ def seed_database(db: Session, force: bool = False):
         },
         {
             "username": "Lawyer-002",
+            "password": "D3BnEVD#G9d8Vpxq",
             "full_name": "Adv. Ananya Roy",
             "email": "ananya.roy@corporatelaw.demo",
             "role": "LAWYER",
@@ -101,14 +113,17 @@ def seed_database(db: Session, force: bool = False):
         },
         {
             "username": "Assistant-001",
+            "password": "jwJkh5yS7w6Pd!kq",
             "full_name": "Kavita Rao",
             "email": "kavita.rao@paralegal.demo",
             "role": "LAWYER",
             "sub_role": "Legal Assistant",
             "assigned_cases": ["CASE-2026-001"]
         },
+        # CLIENTS
         {
             "username": "Client-001",
+            "password": "#vf*kPe42K3vMM$9",
             "full_name": "Rohan Verma (Petitioner)",
             "email": "rohan.verma@apexcloud.demo",
             "role": "CLIENT",
@@ -117,14 +132,17 @@ def seed_database(db: Session, force: bool = False):
         },
         {
             "username": "Client-002",
+            "password": "PxmyYRvK!Bea^m^*",
             "full_name": "Meera Deshmukh (Respondent)",
             "email": "meera.deshmukh@horizonlogistics.demo",
             "role": "CLIENT",
             "sub_role": "Litigant Client",
             "assigned_cases": ["CASE-2026-002"]
         },
+        # SECURITY SIMULATION AGENT (DEMO ONLY)
         {
             "username": "Security-Simulation",
+            "password": "f2V&raFx948VHMXM",
             "full_name": "Automated Security Testbed",
             "email": "sec-sim@greenvault.internal",
             "role": "SECURITY_SIMULATION",
@@ -137,17 +155,18 @@ def seed_database(db: Session, force: bool = False):
         "# GREEN VAULT — HACKATHON DEMO CREDENTIALS",
         "",
         "> **CONFIDENTIAL FOR EVALUATION & DEMO TEAM ONLY**",
-        "> Passwords are cryptographically generated using Python `secrets` and stored in the database exclusively as Argon2id hashes.",
+        "> Passwords are cryptographically verified and stored in the database exclusively as Argon2id hashes.",
         "",
-        "| Username | Generated Strong Password | Role | Sub-Role | Assigned Demo Cases |",
+        "| Username | Demo Password | Role | Sub-Role | Assigned Demo Cases |",
         "| :--- | :--- | :--- | :--- | :--- |"
     ]
 
     users_by_uname = {}
     demo_passwords_json = {}
+    now = datetime.now(timezone.utc)
 
     for udef in user_definitions:
-        pwd = generate_strong_password(16)
+        pwd = udef["password"]
         pwd_hash = hash_password(pwd)
 
         user_obj = User(
@@ -158,7 +177,7 @@ def seed_database(db: Session, force: bool = False):
             role=udef["role"],
             sub_role=udef["sub_role"],
             is_active=True,
-            created_at=datetime.utcnow()
+            created_at=now
         )
         db.add(user_obj)
         db.flush()
@@ -171,13 +190,27 @@ def seed_database(db: Session, force: bool = False):
         demo_passwords_json[udef["username"]] = pwd
 
     # Write GREEN_VAULT_DEMO_CREDENTIALS.md
+    settings.DEMO_CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
     with open(settings.DEMO_CREDENTIALS_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(credentials_md_lines) + "\n")
 
-    # Also save helper json for easy programmatic reference in tests or quick switcher
+    # Save helper json for UI evaluator autofill
     creds_json_path = settings.DEMO_CREDENTIALS_DIR / "demo_credentials.json"
     with open(creds_json_path, "w", encoding="utf-8") as f:
         json.dump(demo_passwords_json, f, indent=2)
+
+    # Also copy to frontend public directory
+    frontend_creds_dir = settings.BASE_DIR.parent / "frontend" / "public" / "demo" / "credentials"
+    frontend_creds_dir.mkdir(parents=True, exist_ok=True)
+    with open(frontend_creds_dir / "demo_credentials.json", "w", encoding="utf-8") as f:
+        json.dump(demo_passwords_json, f, indent=2)
+
+    # Also copy to frontend dist directory if dist exists
+    frontend_dist_creds_dir = settings.BASE_DIR.parent / "frontend" / "dist" / "demo" / "credentials"
+    if frontend_dist_creds_dir.parent.parent.exists():
+        frontend_dist_creds_dir.mkdir(parents=True, exist_ok=True)
+        with open(frontend_dist_creds_dir / "demo_credentials.json", "w", encoding="utf-8") as f:
+            json.dump(demo_passwords_json, f, indent=2)
 
     print(f"[SEED] Generated demo credentials at: {settings.DEMO_CREDENTIALS_FILE}")
 
@@ -213,8 +246,30 @@ def seed_database(db: Session, force: bool = False):
             "court_name": "Principal District & Sessions Court — New Delhi",
             "filing_date": "2026-03-01",
             "next_hearing": "2026-09-18",
-            "description": "Ancestral land title registration challenge and boundary demarcation dispute.",
+            "description": "Ancestral land title registration challenge, survey demarcation, and boundary easement dispute.",
             "connected_systems": json.dumps(["eCourts", "DigiLocker"])
+        },
+        {
+            "id": "CASE-2026-004",
+            "title": "State Telecom Infrastructure Arbitration",
+            "case_type": "Commercial Arbitration",
+            "status": "ACTIVE",
+            "court_name": "Delhi International Arbitration Centre (DIAC)",
+            "filing_date": "2026-04-10",
+            "next_hearing": "2026-10-05",
+            "description": "High-bandwidth fiber optic spectrum deployment revenue share dispute.",
+            "connected_systems": json.dumps(["eCourts", "e-Filing"])
+        },
+        {
+            "id": "CASE-2026-005",
+            "title": "National Green Corridor Environmental Review",
+            "case_type": "Environmental Review",
+            "status": "ACTIVE",
+            "court_name": "High Court of Delhi — Environmental Bench",
+            "filing_date": "2026-05-15",
+            "next_hearing": "2026-10-22",
+            "description": "Public interest environmental compliance evaluation for urban eco-sensitive buffer zones.",
+            "connected_systems": json.dumps(["eCourts", "DigiLocker", "eSakshya"])
         }
     ]
 
@@ -229,28 +284,47 @@ def seed_database(db: Session, force: bool = False):
             next_hearing=c["next_hearing"],
             description=c["description"],
             connected_systems=c["connected_systems"],
-            created_at=datetime.utcnow() - timedelta(days=60)
+            created_at=now - timedelta(days=60)
         )
         db.add(case_obj)
     db.commit()
 
-    # --- 3. CASE ASSIGNMENTS & INITIAL PERMISSIONS ---
+    # --- 3. USER CASE ASSIGNMENTS & RBAC PERMISSIONS ---
+    # Canonical assignments:
+    # Judge-001: CASE-2026-001, CASE-2026-002
+    # Judge-002: CASE-2026-002
+    # Lawyer-001: CASE-2026-001
+    # Lawyer-002: CASE-2026-002
+    # Assistant-001: CASE-2026-001
+    # Client-001: CASE-2026-001
+    # Client-002: CASE-2026-002
+    # Admin-001: All cases (001 through 005)
     assignments_data = [
-        # CASE-001
+        # CASE-2026-001
         ("CASE-2026-001", "Judge-001", "Assigned Judge"),
-        ("CASE-2026-001", "Admin-001", "Court Administrator"),
-        ("CASE-2026-001", "Lawyer-001", "Lead Lawyer (Petitioner)"),
+        ("CASE-2026-001", "Lawyer-001", "Lead Lawyer"),
         ("CASE-2026-001", "Assistant-001", "Legal Assistant"),
-        ("CASE-2026-001", "Client-001", "Litigant Client (Petitioner)"),
-        # CASE-002
+        ("CASE-2026-001", "Client-001", "Litigant Client"),
+        ("CASE-2026-001", "Admin-001", "Court Administrator"),
+
+        # CASE-2026-002
         ("CASE-2026-002", "Judge-001", "Assigned Judge"),
         ("CASE-2026-002", "Judge-002", "Reviewing Judge"),
+        ("CASE-2026-002", "Lawyer-002", "Associate Lawyer"),
+        ("CASE-2026-002", "Client-002", "Litigant Client"),
         ("CASE-2026-002", "Admin-001", "Court Administrator"),
-        ("CASE-2026-002", "Lawyer-002", "Associate Lawyer (Respondent)"),
-        ("CASE-2026-002", "Client-002", "Litigant Client (Respondent)"),
-        # CASE-003 (Assigned ONLY to Admin-001 to demonstrate unauthorized access flow for Judge-001 in demo step 8)
-        ("CASE-2026-003", "Admin-001", "Court Administrator")
+
+        # CASE-2026-003
+        ("CASE-2026-003", "Admin-001", "Court Administrator"),
+
+        # CASE-2026-004
+        ("CASE-2026-004", "Admin-001", "Court Administrator"),
+
+        # CASE-2026-005
+        ("CASE-2026-005", "Admin-001", "Court Administrator"),
     ]
+
+    admin_user = users_by_uname["Admin-001"]
 
     for case_id, uname, arole in assignments_data:
         u = users_by_uname[uname]
@@ -258,24 +332,29 @@ def seed_database(db: Session, force: bool = False):
             case_id=case_id,
             user_id=u.id,
             assignment_role=arole,
-            assigned_at=datetime.utcnow() - timedelta(days=45)
+            assigned_at=now - timedelta(days=45)
         )
         db.add(assign)
 
-        # Add initial permissions
-        for perm in ["VIEW", "DOWNLOAD", "UPLOAD", "CREATE_VERSION", "SHARE"]:
+        perms_to_grant = ["VIEW", "DOWNLOAD"]
+        if u.role in ["JUDGE", "LAWYER", "COURT_ADMIN"]:
+            perms_to_grant.extend(["UPLOAD", "CREATE_VERSION"])
+        if u.role in ["JUDGE", "COURT_ADMIN"]:
+            perms_to_grant.append("ARCHIVE")
+
+        for perm in perms_to_grant:
             p = Permission(
                 user_id=u.id,
                 case_id=case_id,
                 permission_type=perm,
-                granted_by=users_by_uname["Admin-001"].id,
-                granted_at=datetime.utcnow() - timedelta(days=45)
+                granted_by=admin_user.id,
+                granted_at=now - timedelta(days=45)
             )
             db.add(p)
 
     db.commit()
 
-    # --- 4. CONNECTED SYSTEMS (MOCK) ---
+    # --- 4. CONNECTED SYSTEMS (MOCK INTEGRATIONS) ---
     systems_data = [
         {
             "id": "SYS-ECOURTS",
@@ -332,113 +411,36 @@ def seed_database(db: Session, force: bool = False):
             description=s["desc"],
             status=s["status"],
             records_count=s["records"],
-            last_sync=datetime.utcnow() - timedelta(minutes=15),
+            last_sync=now - timedelta(minutes=15),
             badge=s["badge"]
         )
         db.add(cs)
     db.commit()
 
-    # --- 5. GENERATE 10+ FICTIONAL LEGAL DOCUMENTS ---
-    admin_user = users_by_uname["Admin-001"]
+    # --- 5. DEMO DOCUMENTS, IMAGES & VIDEO EVIDENCE ---
     judge1 = users_by_uname["Judge-001"]
+    judge2 = users_by_uname["Judge-002"]
     lawyer1 = users_by_uname["Lawyer-001"]
+    lawyer2 = users_by_uname["Lawyer-002"]
+    asst1 = users_by_uname["Assistant-001"]
+    client1 = users_by_uname["Client-001"]
+    client2 = users_by_uname["Client-002"]
 
-    docs_specs = [
-        {
-            "id": "DOC-001-REG",
-            "case_id": "CASE-2026-001",
-            "title": "Case_Registration.pdf",
-            "category": "Registration",
-            "court": "High Court of Delhi — Commercial Division",
-            "paragraphs": [
-                "1. The present Commercial Civil Dispute is formally registered under Commercial Court Suit No. DL-HC-COMM-2026-001.",
-                "2. The Petitioner, Rohan Verma, has instituted this proceeding claiming specific performance of the Master Engineering & Procurement Agreement dated 14th November 2024.",
-                "3. Summons and electronic process issued to Respondent Apex Infrastructure Ltd. in accordance with High Court Rules."
-            ],
-            "uploader": admin_user,
-            "versions_count": 1
-        },
+    pdf_docs_specs = [
+        # CASE-2026-001
         {
             "id": "DOC-001-PET",
             "case_id": "CASE-2026-001",
             "title": "Petition.pdf",
             "category": "Petition",
+            "classification": "PUBLIC_CASE_RECORD",
             "court": "High Court of Delhi — Commercial Division",
             "paragraphs": [
-                "TO THE HON'BLE CHIEF JUSTICE AND PUISNE JUDGES OF THE HIGH COURT OF DELHI",
-                "1. That the Petitioner is a reputable commercial developer engaged in green infrastructure.",
-                "2. That the Respondent failed to deliver Phase 2 structural certifications despite receiving an advance disbursement of INR 4.8 Crores.",
-                "3. PRAYER: The Petitioner respectfully prays that this Hon'ble Court issue a decree of specific performance and injunction against unauthorized asset transfer."
-            ],
-            "uploader": lawyer1,
-            "versions_count": 1
-        },
-        {
-            "id": "DOC-001-EVI-A",
-            "case_id": "CASE-2026-001",
-            "title": "Evidence_A.pdf",
-            "category": "Evidence",
-            "court": "High Court of Delhi — Commercial Division",
-            "paragraphs": [
-                "ANNEXURE P-1: MASTER EPC AGREEMENT & AMENDMENT MILESTONES",
-                "Clause 14.2 (Dispute Resolution): In the event of material default, all electronic notices and certified vault records shall be admissible as prima facie proof.",
-                "Clause 18.1 (Escrow): Security milestone guarantees were executed under joint escrow verification."
-            ],
-            "uploader": lawyer1,
-            "versions_count": 3  # Will generate v1, v2, v3
-        },
-        {
-            "id": "DOC-001-EVI-B",
-            "case_id": "CASE-2026-001",
-            "title": "Evidence_B.pdf",
-            "category": "Evidence",
-            "court": "High Court of Delhi — Commercial Division",
-            "paragraphs": [
-                "ANNEXURE P-2: CERTIFIED BANK STATEMENTS & RTGS AUDIT TRAIL",
-                "Transaction Reference: RTGS-UTR-20241114-8849102",
-                "Amount: INR 48,000,000.00 transferred to Escrow Account 9182300184.",
-                "DigiLocker Banking Certificate Timestamp: 2024-11-14T11:42:00Z."
-            ],
-            "uploader": lawyer1,
-            "versions_count": 1
-        },
-        {
-            "id": "DOC-001-WIT",
-            "case_id": "CASE-2026-001",
-            "title": "Witness_Statement.pdf",
-            "category": "Witness Statement",
-            "court": "High Court of Delhi — Commercial Division",
-            "paragraphs": [
-                "AFFIDAVIT OF MR. ALOK NATH (CHIEF STRUCTURAL ENGINEER)",
-                "1. I solemnly affirm that Phase 1 site inspection was completed on 10th January 2025.",
-                "2. Concrete quality tests passed all IS-456 compliance parameters as per certified lab testing sheets attached."
-            ],
-            "uploader": lawyer1,
-            "versions_count": 1
-        },
-        {
-            "id": "DOC-001-FOR",
-            "case_id": "CASE-2026-001",
-            "title": "Forensic_Report.pdf",
-            "category": "Forensic Report",
-            "court": "High Court of Delhi — Commercial Division",
-            "paragraphs": [
-                "DIGITAL FORENSIC AUDIT REPORT — ICJS INTEGRATED LABORATORY",
-                "1. Cryptographic SHA-256 verification of server log communications between Petitioner and Respondent.",
-                "2. All digital signatures on communication threads verified without evidence of retroactive manipulation."
-            ],
-            "uploader": admin_user,
-            "versions_count": 1
-        },
-        {
-            "id": "DOC-001-NOT",
-            "case_id": "CASE-2026-001",
-            "title": "Legal_Notice.pdf",
-            "category": "Legal Notice",
-            "court": "High Court of Delhi — Commercial Division",
-            "paragraphs": [
-                "STATUTORY PRE-LITIGATION LEGAL NOTICE UNDER SECTION 12A OF COMMERCIAL COURTS ACT",
-                "Respondent was given 15 statutory days to remediate milestone default prior to the institution of this formal suit."
+                "HIGH COURT OF DELHI — COMMERCIAL DIVISION",
+                "Sharma vs. Apex Infrastructure Ltd. (Ref: COMM-CIVIL-2026-001)",
+                "1. That the Petitioner entered into an EPC Commercial Construction Agreement on 14th June 2024.",
+                "2. That the Respondent failed to deliver certified structural milestones despite full advance disbursement.",
+                "3. PRAYER: Order of specific performance, preservation of escrow reserves, and damages."
             ],
             "uploader": lawyer1,
             "versions_count": 1
@@ -448,53 +450,190 @@ def seed_database(db: Session, force: bool = False):
             "case_id": "CASE-2026-001",
             "title": "Court_Order.pdf",
             "category": "Court Order",
+            "classification": "COURT_ORDER",
             "court": "High Court of Delhi — Commercial Division",
             "paragraphs": [
-                "ORDER DATED 15TH FEBRUARY 2026 — BEFORE HON. JUSTICE RAJESH SHARMA",
-                "1. Counsel for both parties present.",
-                "2. Respondent is directed to maintain status quo regarding project bank guarantees until next hearing.",
-                "3. Re-list on 25th August 2026 for final evidence framing."
+                "ORDER OF COMMERCIAL BENCH II — HON. JUSTICE RAJESH SHARMA",
+                "1. Learned counsel Adv. Vikram Sethi appearing for petitioner; respondent represented by associate counsel.",
+                "2. Ad-interim status quo granted regarding project bank guarantees and escrow asset distribution.",
+                "3. Digital vault records verified under Section 65B of Indian Evidence Act."
             ],
             "uploader": judge1,
             "versions_count": 1
         },
         {
-            "id": "DOC-001-HRG",
+            "id": "DOC-001-JNT",
             "case_id": "CASE-2026-001",
-            "title": "Hearing_Record.pdf",
-            "category": "Hearing Record",
+            "title": "Judge_Internal_Note.pdf",
+            "category": "Chamber Note",
+            "classification": "COURT_INTERNAL",
             "court": "High Court of Delhi — Commercial Division",
             "paragraphs": [
-                "PROCEEDINGS OF THE COMMERCIAL DIVISION BENCH II",
-                "Arguments heard on preliminary injunction applications IA-1029/2026. Document repository access confirmed for all parties."
+                "CONFIDENTIAL JUDICIAL BENCH CHAMBER NOTES — STRICTLY RESTRICTED TO BENCH",
+                "Preliminary review indicates prima facie contractor insolvency risk.",
+                "Direct registry to expedite forensic escrow audit before final arguments."
+            ],
+            "uploader": judge1,
+            "versions_count": 1
+        },
+        {
+            "id": "DOC-001-LNT",
+            "case_id": "CASE-2026-001",
+            "title": "Lawyer_Internal_Note.pdf",
+            "category": "Counsel Strategy",
+            "classification": "LAWYER_CONFIDENTIAL",
+            "court": "High Court of Delhi — Commercial Division",
+            "paragraphs": [
+                "PRIVILEGED ATTORNEY-CLIENT WORK PRODUCT — ADV. VIKRAM SETHI",
+                "Strategy note regarding cross-examination of project engineer.",
+                "Examine bank guarantee invocation timelines and forensic subcontractor invoices."
+            ],
+            "uploader": lawyer1,
+            "versions_count": 1
+        },
+        {
+            "id": "DOC-001-RST",
+            "case_id": "CASE-2026-001",
+            "title": "Restricted_Forensic_Audit.pdf",
+            "category": "Audit Report",
+            "classification": "RESTRICTED",
+            "court": "High Court of Delhi — Commercial Division",
+            "paragraphs": [
+                "SEALED ENVELOPE COURT COMMISSIONER FORENSIC AUDIT",
+                "Banking trail analysis confirms diversion of INR 1.2 Crores to non-designated parent entities.",
+                "Access restricted to Presiding Judge and Registrar General."
             ],
             "uploader": admin_user,
             "versions_count": 1
         },
         {
-            "id": "DOC-001-JDG",
+            "id": "DOC-001-EVI-A",
             "case_id": "CASE-2026-001",
-            "title": "Judgment.pdf",
-            "category": "Judgment",
+            "title": "Evidence_A.pdf",
+            "category": "Evidence",
+            "classification": "EVIDENCE",
             "court": "High Court of Delhi — Commercial Division",
             "paragraphs": [
-                "INTERIM JUDGMENT ON INJUNCTION APPLICATION",
-                "The Court finds a strong prima facie case in favor of the Petitioner. Respondent restrained from alienating project assets."
+                "ANNEXURE P-1: MASTER EPC COMMERCIAL CONTRACT & AMENDMENT MILESTONES",
+                "Clause 14.2 (Dispute Resolution): Certified digital vault records shall be admissible as prima facie proof.",
+                "Clause 18.1 (Escrow): Security milestone guarantees were executed under joint escrow verification."
             ],
-            "uploader": judge1,
+            "uploader": lawyer1,
+            "versions_count": 3
+        },
+        # CASE-2026-002
+        {
+            "id": "DOC-002-SLA",
+            "case_id": "CASE-2026-002",
+            "title": "SLA_Agreement.pdf",
+            "category": "Contract",
+            "classification": "PUBLIC_CASE_RECORD",
+            "court": "National Company Law Tribunal (NCLT) — Bench III",
+            "paragraphs": [
+                "ENTERPRISE CLOUD INFRASTRUCTURE SLA & ESCROW AGREEMENT",
+                "Guaranteed availability 99.99% with financial liquidated damages for unplanned outages."
+            ],
+            "uploader": lawyer2,
+            "versions_count": 1
+        },
+        {
+            "id": "DOC-002-ORD",
+            "case_id": "CASE-2026-002",
+            "title": "NCLT_Interim_Order.pdf",
+            "category": "Court Order",
+            "classification": "COURT_ORDER",
+            "court": "National Company Law Tribunal (NCLT) — Bench III",
+            "paragraphs": [
+                "ORDER OF NCLT BENCH III — HON. JUSTICE PRIYA MALHOTRA",
+                "Escrow repository access granted to appointed forensic arbitrator for system log verification."
+            ],
+            "uploader": judge2,
+            "versions_count": 1
+        },
+        {
+            "id": "DOC-002-JNT",
+            "case_id": "CASE-2026-002",
+            "title": "Bench_Deliberation_Note.pdf",
+            "category": "Chamber Note",
+            "classification": "COURT_INTERNAL",
+            "court": "National Company Law Tribunal (NCLT) — Bench III",
+            "paragraphs": [
+                "NCLT BENCH III INTERNAL DELIBERATION MEMORANDUM",
+                "Assessing jurisdictional thresholds under Section 241/242 of Companies Act."
+            ],
+            "uploader": judge2,
+            "versions_count": 1
+        },
+        # CASE-2026-003
+        {
+            "id": "DOC-003-TTL",
+            "case_id": "CASE-2026-003",
+            "title": "Title_Deed_Ancestral_1984.pdf",
+            "category": "Property Deed",
+            "classification": "PUBLIC_CASE_RECORD",
+            "court": "Principal District & Sessions Court — New Delhi",
+            "paragraphs": [
+                "REGISTERED TITLE DEED VOL-44 PAGE-109 (HERITAGE ESTATE ADJUDICATION)",
+                "Certified registry extract documenting ancestral boundary demarcation and certified khasra records."
+            ],
+            "uploader": admin_user,
+            "versions_count": 1
+        },
+        {
+            "id": "DOC-003-ORD",
+            "case_id": "CASE-2026-003",
+            "title": "Court_Commission_Report.pdf",
+            "category": "Court Order",
+            "classification": "COURT_ORDER",
+            "court": "Principal District & Sessions Court — New Delhi",
+            "paragraphs": [
+                "COMMISSIONER REPORT DATED 12TH APRIL 2026",
+                "Local boundary demarcation survey completed with revenue department officials present."
+            ],
+            "uploader": admin_user,
+            "versions_count": 1
+        },
+        # CASE-2026-004
+        {
+            "id": "DOC-004-ARB",
+            "case_id": "CASE-2026-004",
+            "title": "Arbitration_Reference_Notice.pdf",
+            "category": "Arbitration",
+            "classification": "PUBLIC_CASE_RECORD",
+            "court": "Delhi International Arbitration Centre (DIAC)",
+            "paragraphs": [
+                "DIAC ARBITRATION NOTICE UNDER SECTION 11 OF ARBITRATION ACT",
+                "Notice of dispute regarding high-speed spectrum allocation revenue sharing agreement."
+            ],
+            "uploader": admin_user,
+            "versions_count": 1
+        },
+        # CASE-2026-005
+        {
+            "id": "DOC-005-ENV",
+            "case_id": "CASE-2026-005",
+            "title": "Environmental_Impact_Petition.pdf",
+            "category": "Petition",
+            "classification": "PUBLIC_CASE_RECORD",
+            "court": "High Court of Delhi — Environmental Bench",
+            "paragraphs": [
+                "WRIT PETITION (CIVIL) — PUBLIC INTEREST LITIGATION",
+                "Review of buffer zone tree canopy protection guidelines in the National Capital Region."
+            ],
+            "uploader": admin_user,
             "versions_count": 1
         }
     ]
 
-    for dspec in docs_specs:
-        pdf_bytes = generate_legal_pdf(
+    for dspec in pdf_docs_specs:
+        file_bytes = generate_legal_pdf(
             title=dspec["title"].replace(".pdf", "").replace("_", " "),
             case_id=dspec["case_id"],
-            case_title="Sharma vs. Apex Infrastructure Ltd.",
+            case_title="Sharma vs. Apex Infrastructure Ltd." if dspec["case_id"] == "CASE-2026-001" else ("Veritas Tech vs. Horizon Logistics" if dspec["case_id"] == "CASE-2026-002" else ("Heritage Estate Title Adjudication" if dspec["case_id"] == "CASE-2026-003" else ("State Telecom Arbitration" if dspec["case_id"] == "CASE-2026-004" else "National Green Corridor Review"))),
             doc_category=dspec["category"],
             version=1,
             court_name=dspec["court"],
-            body_paragraphs=dspec["paragraphs"],
+            body_paragraphs=dspec.get("paragraphs", ["Official Legal Record."]),
             signatory=dspec["uploader"].full_name,
             date_str="2026-02-15"
         )
@@ -504,18 +643,19 @@ def seed_database(db: Session, force: bool = False):
             case_id=dspec["case_id"],
             title=dspec["title"],
             category=dspec["category"],
-            file_bytes=pdf_bytes,
+            classification=dspec.get("classification", "PUBLIC_CASE_RECORD"),
+            file_bytes=file_bytes,
             file_name=dspec["title"],
             mime_type="application/pdf",
             user=dspec["uploader"],
             doc_id=dspec["id"]
         )
 
-        # If versions_count > 1, create subsequent versions (e.g. for Evidence_A)
-        if dspec["versions_count"] > 1:
+        # Multi-version handling for Evidence_A.pdf (v2, v3)
+        if dspec.get("versions_count", 1) > 1:
             for v_num in range(2, dspec["versions_count"] + 1):
-                v_paragraphs = dspec["paragraphs"] + [
-                    f"ADDENDUM {v_num - 1}: Clarification clause and signed amendment executed on {2026 - (3-v_num)}-03-01."
+                v_paragraphs = dspec.get("paragraphs", []) + [
+                    f"ADDENDUM {v_num - 1}: Clarification clause and signed amendment executed on 2026-03-0{v_num}."
                 ]
                 v_pdf_bytes = generate_legal_pdf(
                     title=dspec["title"].replace(".pdf", "").replace("_", " "),
@@ -538,7 +678,97 @@ def seed_database(db: Session, force: bool = False):
                     change_summary=f"Supplemental Addendum #{v_num - 1} incorporated & digitally sealed"
                 )
 
-    # --- 6. SEED INITIAL ACCESS REQUESTS ---
+    # --- 6. SEED DIGITAL EVIDENCE IMAGES (JPG / PNG) ---
+    # Evidence_01.jpg in CASE-2026-001
+    jpg_evidence_bytes = create_sample_jpg_image("SITE_INSPECTION_PHOTO")
+    DocumentService.save_and_encrypt_document(
+        db=db,
+        case_id="CASE-2026-001",
+        title="Evidence_01.jpg",
+        category="Evidence",
+        classification="EVIDENCE",
+        file_bytes=jpg_evidence_bytes,
+        file_name="Evidence_01.jpg",
+        mime_type="image/jpeg",
+        user=lawyer1,
+        doc_id="DOC-001-IMG"
+    )
+
+    # Server_Audit_Log_Evidence.png in CASE-2026-002
+    png_evidence_bytes = create_sample_png_image("SERVER_AUDIT_LOG_EVIDENCE")
+    DocumentService.save_and_encrypt_document(
+        db=db,
+        case_id="CASE-2026-002",
+        title="Server_Audit_Log_Evidence.png",
+        category="Evidence",
+        classification="EVIDENCE",
+        file_bytes=png_evidence_bytes,
+        file_name="Server_Audit_Log_Evidence.png",
+        mime_type="image/png",
+        user=lawyer2,
+        doc_id="DOC-002-IMG"
+    )
+
+    # Site_Demarcation_Survey_Photo.jpg in CASE-2026-003
+    jpg_survey_bytes = create_sample_jpg_image("SURVEY_PHOTO")
+    DocumentService.save_and_encrypt_document(
+        db=db,
+        case_id="CASE-2026-003",
+        title="Site_Demarcation_Survey_Photo.jpg",
+        category="Evidence",
+        classification="EVIDENCE",
+        file_bytes=jpg_survey_bytes,
+        file_name="Site_Demarcation_Survey_Photo.jpg",
+        mime_type="image/jpeg",
+        user=admin_user,
+        doc_id="DOC-003-IMG"
+    )
+
+    # --- 7. SEED DIGITAL VIDEO EVIDENCE (MP4 / H.264) ---
+    # Evidence_Video_01.mp4 in CASE-2026-001
+    mp4_video_bytes = create_sample_mp4_video()
+    DocumentService.save_and_encrypt_document(
+        db=db,
+        case_id="CASE-2026-001",
+        title="Evidence_Video_01.mp4",
+        category="Digital Evidence",
+        classification="EVIDENCE",
+        file_bytes=mp4_video_bytes,
+        file_name="Evidence_Video_01.mp4",
+        mime_type="video/mp4",
+        user=lawyer1,
+        doc_id="DOC-001-VID"
+    )
+
+    # CCTV_DataCenter_Access_Evidence.mp4 in CASE-2026-002
+    DocumentService.save_and_encrypt_document(
+        db=db,
+        case_id="CASE-2026-002",
+        title="CCTV_DataCenter_Access_Evidence.mp4",
+        category="Digital Evidence",
+        classification="EVIDENCE",
+        file_bytes=mp4_video_bytes,
+        file_name="CCTV_DataCenter_Access_Evidence.mp4",
+        mime_type="video/mp4",
+        user=lawyer2,
+        doc_id="DOC-002-VID"
+    )
+
+    # Drone_Survey_Boundary_Video.mp4 in CASE-2026-003
+    DocumentService.save_and_encrypt_document(
+        db=db,
+        case_id="CASE-2026-003",
+        title="Drone_Survey_Boundary_Video.mp4",
+        category="Digital Evidence",
+        classification="EVIDENCE",
+        file_bytes=mp4_video_bytes,
+        file_name="Drone_Survey_Boundary_Video.mp4",
+        mime_type="video/mp4",
+        user=admin_user,
+        doc_id="DOC-003-VID"
+    )
+
+    # --- 8. SEED INITIAL ACCESS REQUESTS ---
     req1 = AccessRequest(
         id="REQ-2026-001",
         user_id=users_by_uname["Lawyer-002"].id,
@@ -546,7 +776,7 @@ def seed_database(db: Session, force: bool = False):
         requested_permissions=json.dumps(["VIEW", "DOWNLOAD"]),
         reason="Intervener application review on behalf of second-tier subcontractors.",
         status="PENDING",
-        created_at=datetime.utcnow() - timedelta(hours=3)
+        created_at=now - timedelta(hours=3)
     )
     db.add(req1)
 
@@ -555,17 +785,17 @@ def seed_database(db: Session, force: bool = False):
         user_id=users_by_uname["Assistant-001"].id,
         case_id="CASE-2026-002",
         requested_permissions=json.dumps(["VIEW"]),
-        reason="Assisting lead counsel with NCLT precedent research.",
+        reason="Assisting lead counsel with precedent research.",
         status="APPROVED",
         reviewed_by=admin_user.id,
-        reviewed_at=datetime.utcnow() - timedelta(days=2),
+        reviewed_at=now - timedelta(days=2),
         review_note="Granted temporary view permissions per chamber request.",
-        created_at=datetime.utcnow() - timedelta(days=3)
+        created_at=now - timedelta(days=3)
     )
     db.add(req2)
     db.commit()
 
-    # --- 7. INITIAL AUDIT EVENTS & SYSTEM STATUS ---
+    # --- 9. INITIAL AUDIT EVENT ---
     AuditService.log_event(
         db=db,
         actor=admin_user,
@@ -573,7 +803,7 @@ def seed_database(db: Session, force: bool = False):
         resource_type="VAULT",
         resource_id="GREEN_VAULT_GENESIS",
         outcome="SUCCESS",
-        details={"message": "Green Vault Legal Repository initialized with AES-256-GCM encryption & Hash-Chained Blockchain Ledger."}
+        details={"message": "Green Vault Legal Repository initialized with Argon2id, AES-256-GCM encryption & Hash-Chained Blockchain Ledger."}
     )
 
-    print("[SEED] Green Vault database seeding successfully completed!")
+    print("[SEED] Green Vault database seeding successfully completed with all 9 canonical demo users!")

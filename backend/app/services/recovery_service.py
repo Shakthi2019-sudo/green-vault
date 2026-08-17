@@ -1,6 +1,6 @@
 import shutil
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
@@ -91,7 +91,7 @@ class RecoveryService:
         doc.is_restricted = False
         doc.status = "ACTIVE"
         doc.restriction_reason = None
-        doc.updated_at = datetime.utcnow()
+        doc.updated_at = datetime.now(timezone.utc)
 
         version.is_tampered = False
 
@@ -113,7 +113,7 @@ class RecoveryService:
 
         rec.status = "RESTORED"
         rec.restored_by = user.id
-        rec.restored_at = datetime.utcnow()
+        rec.restored_at = datetime.now(timezone.utc)
         rec.details = f"Restored successfully: {reason}"
 
         # Resolve associated security events
@@ -123,7 +123,7 @@ class RecoveryService:
         ).all()
         for ev in events:
             ev.is_resolved = True
-            ev.resolved_at = datetime.utcnow()
+            ev.resolved_at = datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(doc)

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any
 from sqlalchemy.orm import Session
@@ -49,7 +49,7 @@ class IntegrityService:
                 "message": "Critical: Vault payload file missing from storage.",
                 "computed_hash": "N/A",
                 "trusted_blockchain_hash": trusted_hash,
-                "verified_at": datetime.utcnow()
+                "verified_at": datetime.now(timezone.utc)
             }
 
         # Check if marked as simulated tampered
@@ -104,5 +104,5 @@ class IntegrityService:
             "message": message,
             "computed_hash": computed_hash,
             "trusted_blockchain_hash": trusted_hash,
-            "verified_at": datetime.utcnow()
+            "verified_at": datetime.now(timezone.utc)
         }

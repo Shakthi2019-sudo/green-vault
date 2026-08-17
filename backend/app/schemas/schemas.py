@@ -1,6 +1,20 @@
-from datetime import datetime
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, EmailStr, Field
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+from typing import Optional, List, Dict, Any, Annotated
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic.functional_serializers import PlainSerializer
+
+IST = ZoneInfo("Asia/Kolkata")
+
+def serialize_utc_datetime(dt: Optional[datetime]) -> Optional[str]:
+    """Serialize datetime as timezone-aware ISO 8601 string (with UTC offset e.g. +00:00)."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+UTCDateTime = Annotated[datetime, PlainSerializer(serialize_utc_datetime, return_type=str)]
 
 # --- AUTH SCHEMAS ---
 class LoginRequest(BaseModel):
@@ -22,8 +36,7 @@ class UserResponse(BaseModel):
     assigned_cases: List[str] = []
     permissions: List[str] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class DemoUserItem(BaseModel):
     username: str
@@ -52,11 +65,10 @@ class CaseResponse(BaseModel):
     description: Optional[str] = None
     connected_systems: List[str] = []
     documents_count: int = 0
-    created_at: datetime
+    created_at: UTCDateTime
     is_authorized: bool = True
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CaseDetailResponse(CaseResponse):
     people: List[CaseAssignmentResponse] = []
@@ -75,11 +87,10 @@ class DocumentVersionResponse(BaseModel):
     sha256_hash: str
     change_summary: str
     uploader_name: Optional[str] = None
-    created_at: datetime
+    created_at: UTCDateTime
     is_tampered: bool = False
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class DocumentResponse(BaseModel):
     id: str
@@ -87,6 +98,7 @@ class DocumentResponse(BaseModel):
     case_title: Optional[str] = None
     title: str
     category: str
+    classification: str = "PUBLIC_CASE_RECORD"
     current_version: int
     status: str
     is_restricted: bool
@@ -94,12 +106,11 @@ class DocumentResponse(BaseModel):
     sha256_fingerprint: str
     uploaded_by: int
     uploader_name: Optional[str] = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: UTCDateTime
+    updated_at: UTCDateTime
     versions: List[DocumentVersionResponse] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class DocumentVerifyResponse(BaseModel):
     document_id: str
@@ -109,7 +120,7 @@ class DocumentVerifyResponse(BaseModel):
     message: str
     computed_hash: str
     trusted_blockchain_hash: str
-    verified_at: datetime
+    verified_at: UTCDateTime
 
 class CreateVersionRequest(BaseModel):
     change_summary: str
@@ -136,12 +147,11 @@ class AccessRequestResponse(BaseModel):
     status: str  # PENDING, APPROVED, REJECTED
     reviewed_by: Optional[int] = None
     reviewer_name: Optional[str] = None
-    reviewed_at: Optional[datetime] = None
+    reviewed_at: Optional[UTCDateTime] = None
     review_note: Optional[str] = None
-    created_at: datetime
+    created_at: UTCDateTime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class AccessRequestReview(BaseModel):
     status: str  # APPROVED or REJECTED
@@ -151,7 +161,7 @@ class AccessRequestReview(BaseModel):
 class BlockchainRecordResponse(BaseModel):
     id: str
     sequence_number: int
-    timestamp: datetime
+    timestamp: UTCDateTime
     previous_hash: str
     transaction_hash: str
     event_type: str
@@ -164,8 +174,7 @@ class BlockchainRecordResponse(BaseModel):
     details: Dict[str, Any] = {}
     human_description: str = ""
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ChainVerificationResponse(BaseModel):
     is_valid: bool
@@ -188,7 +197,7 @@ class BlockchainStatsResponse(BaseModel):
 # --- SECURITY SCHEMAS ---
 class SecurityEventResponse(BaseModel):
     id: str
-    timestamp: datetime
+    timestamp: UTCDateTime
     risk_level: str  # LOW, MEDIUM, HIGH, CRITICAL
     category: str
     title: str
@@ -199,11 +208,10 @@ class SecurityEventResponse(BaseModel):
     case_id: Optional[str] = None
     document_id: Optional[str] = None
     is_resolved: bool
-    resolved_at: Optional[datetime] = None
+    resolved_at: Optional[UTCDateTime] = None
     details: Dict[str, Any] = {}
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class SecurityStatusResponse(BaseModel):
     status: str  # GREEN, YELLOW, RED
@@ -223,12 +231,11 @@ class RecoveryRecordResponse(BaseModel):
     trusted_hash: str
     tampered_hash: Optional[str] = None
     status: str
-    restored_at: Optional[datetime] = None
+    restored_at: Optional[UTCDateTime] = None
     restorer_name: Optional[str] = None
     details: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class RestoreDocumentRequest(BaseModel):
     reason: str = "Authorized restoration from isolated recovery vault"
@@ -241,16 +248,15 @@ class ConnectedSystemResponse(BaseModel):
     description: str
     status: str
     records_count: int
-    last_sync: datetime
+    last_sync: UTCDateTime
     badge: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # --- AUDIT SCHEMAS ---
 class AuditEventResponse(BaseModel):
     id: str
-    timestamp: datetime
+    timestamp: UTCDateTime
     actor_name: str
     actor_role: str
     action: str
@@ -260,8 +266,7 @@ class AuditEventResponse(BaseModel):
     outcome: str
     details: Dict[str, Any] = {}
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # --- SIMULATION SCHEMAS ---
 class SimulationActionResponse(BaseModel):

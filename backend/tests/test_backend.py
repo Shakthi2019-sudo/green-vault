@@ -134,3 +134,81 @@ def test_access_request_approval_workflow(db):
 
     # Now authorized
     assert PermissionService.user_has_case_access(db, user, case.id, "VIEW") is True
+
+def test_document_preview_authorization_and_audit(db):
+    judge = User(username="Judge-002", password_hash="hash", full_name="Hon. Justice Sharma", email="judge2@test.com", role="JUDGE", sub_role="Assigned Judge")
+    lawyer = User(username="Lawyer-002", password_hash="hash", full_name="Adv. Divya", email="lawyer2@test.com", role="LAWYER", sub_role="Advocate")
+    case = Case(id="CASE-2026-PREV", title="Preview Test Case", case_type="Commercial", court_name="High Court", filing_date="2026-01-01")
+    
+    # Internal judge note (COURT_INTERNAL)
+    doc_internal = Document(
+        id="DOC-PREV-01",
+        case_id=case.id,
+        title="Judge_Internal_Draft.pdf",
+        category="Court Record",
+        classification="COURT_INTERNAL",
+        current_version=1,
+        status="ACTIVE",
+        is_restricted=False,
+        uploaded_by=1
+    )
+    # Evidence item (EVIDENCE)
+    doc_evidence = Document(
+        id="DOC-PREV-02",
+        case_id=case.id,
+        title="Evidence_Site_Photo.jpg",
+        category="Evidence",
+        classification="EVIDENCE",
+        current_version=1,
+        status="ACTIVE",
+        is_restricted=False,
+        uploaded_by=1
+    )
+    db.add_all([judge, lawyer, case, doc_internal, doc_evidence])
+    db.commit()
+
+    # Assign case to judge and lawyer
+    from app.models.models import CaseAssignment
+    db.add(CaseAssignment(case_id=case.id, user_id=judge.id, assignment_role="Assigned Judge"))
+    db.add(CaseAssignment(case_id=case.id, user_id=lawyer.id, assignment_role="Lead Lawyer"))
+    db.commit()
+
+    # Judge can view both
+    assert PermissionService.user_has_document_access(db, judge, doc_internal, "VIEW") is True
+    assert PermissionService.user_has_document_access(db, judge, doc_evidence, "VIEW") is True
+
+    # Lawyer can view evidence, but is 403 denied on internal judge draft
+    assert PermissionService.user_has_document_access(db, lawyer, doc_evidence, "VIEW") is True
+    assert PermissionService.user_has_document_access(db, lawyer, doc_internal, "VIEW") is False
+
+def test_utc_iso_timestamp_serialization():
+    from datetime import datetime, timezone
+    from app.schemas.schemas import CaseResponse, DocumentVerifyResponse
+
+    dt_naive = datetime(2026, 8, 17, 14, 3, 15)
+    c_resp = CaseResponse(
+        id="CASE-TEST",
+        title="Test Case",
+        case_type="Civil",
+        status="ACTIVE",
+        court_name="High Court",
+        filing_date="2026-01-01",
+        created_at=dt_naive
+    )
+    json_str = c_resp.model_dump_json()
+    assert "+00:00" in json_str or "Z" in json_str
+    assert "2026-08-17T14:03:15+00:00" in json_str
+
+    verify_resp = DocumentVerifyResponse(
+        document_id="DOC-001",
+        version_number=1,
+        is_valid=True,
+        status="VERIFIED",
+        message="Valid",
+        computed_hash="abc",
+        trusted_blockchain_hash="abc",
+        verified_at=dt_naive
+    )
+    v_json = verify_resp.model_dump_json()
+    assert "2026-08-17T14:03:15+00:00" in v_json
+

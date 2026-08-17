@@ -121,16 +121,16 @@ def simulate_failed_logins(db: Session = Depends(get_db)):
         category="FAILED_LOGINS",
         title="Multiple Failed Authentication Attempts",
         risk_level="MEDIUM",
-        what_happened="5 consecutive failed login attempts recorded for account 'judge.001' from IP 192.168.1.104 within 60 seconds.",
+        what_happened="5 consecutive failed login attempts recorded for account 'Judge-001' from IP 192.168.1.104 within 60 seconds.",
         why_it_matters="Repeated incorrect passwords may indicate credential guessing or brute-force testing.",
         what_to_do="Account login rate-limiting has been enforced. Check with judicial staff if assistance is needed.",
-        details={"simulation": True, "failed_count": 5, "target_user": "judge.001"}
+        details={"simulation": True, "failed_count": 5, "target_user": "Judge-001"}
     )
     return SimulationActionResponse(
         success=True,
         simulation_type="FAILED_LOGIN_BURST",
         message="Simulated 5 failed login attempts. Security status updated to YELLOW.",
-        target_resource="judge.001",
+        target_resource="Judge-001",
         security_event_id=sec_event.id
     )
 

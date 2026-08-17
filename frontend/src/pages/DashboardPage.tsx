@@ -20,6 +20,7 @@ import { api } from '../services/api';
 import { CaseItem, BlockchainRecord, SecurityStatusReport, BlockchainStats } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 import { TechnicalDetailsModal } from '../components/TechnicalDetailsModal';
+import { formatISTTimestamp, formatISTDateTime, formatISTTime } from '../utils/dateUtils';
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
@@ -341,8 +342,8 @@ export const DashboardPage: React.FC = () => {
                     <span className="font-mono font-semibold text-slate-700">
                       Block #{tx.sequence_number}
                     </span>
-                    <span className="text-[10px] text-slate-400">
-                      {new Date(tx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      {formatISTTimestamp(tx.timestamp)}
                     </span>
                   </div>
                   <p className="text-xs font-medium text-slate-800 mt-1 line-clamp-1">
